@@ -7,7 +7,7 @@ import io
 
 app = FastAPI()
 
-# Allow CORS for all origins 
+# CORS for all origins (not recommended for production)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,18 +16,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load your pre-trained model
-with open("app/digit_classifier_model.pkl", "rb") as f: 
+# Load pre-trained model once at startup
+with open("app/digit_classifier_model.pkl", "rb") as f:
     model = pickle.load(f)
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    # Read image file
-    image_bytes = await file.read()
-    img = Image.open(io.BytesIO(image_bytes)).convert("L")  # Convert to grayscale
-    img = img.resize((8, 8))  # Resize to match training data
-    img_array = np.array(img).reshape(1, -1)  # Flatten the image
-    prediction = model.predict(img_array)
-    return {"prediction": int(prediction[0])} main.py
+    try:
+        image_bytes = await file.read()
+        img = Image.open(io.BytesIO(image_bytes)).convert("L")
+        img = img.resize((8, 8))
+        img_array = np.array(img)
 
-    
+        # Optional: scale to 0-16 (as in sklearn digits dataset)
+        if img_array.max() > 16:
+            img_array = (img_array / 255.0) * 16
+
+        img_array = img_array.reshape(1, -1)
+        prediction = model.predict(img_array)
+
+        return {
+            "success": True,
+            "prediction": int(prediction[0]),
+            "confidence": 1.0  # placeholder confidence
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
