@@ -17,7 +17,7 @@ app.add_middleware(
 )
 
 # Load your pre-trained model
-with open("app/model.pkl", "rb") as f:
+with open("app/digit_classifier_model.pkl", "rb") as f:
     model = pickle.load(f)
 
 @app.post("/predict")
