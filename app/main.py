@@ -1,48 +1,33 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+import pickle
 import numpy as np
 from PIL import Image
 import io
-import joblib
-
-# Load your trained model
-model = joblib.load('digit_classifier.pkl')
 
 app = FastAPI()
 
-# CORS configuration (important for frontend-backend communication)
+# Allow CORS for all origins 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production
+    allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Load your pre-trained model
+with open("app/digit_classifier_model.pkl", "rb") as f: 
+    model = pickle.load(f)
+
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    try:
-        # Verify the file is an image
-        if not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
+    # Read image file
+    image_bytes = await file.read()
+    img = Image.open(io.BytesIO(image_bytes)).convert("L")  # Convert to grayscale
+    img = img.resize((8, 8))  # Resize to match training data
+    img_array = np.array(img).reshape(1, -1)  # Flatten the image
+    prediction = model.predict(img_array)
+    return {"prediction": int(prediction[0])} main.py
 
-        # Read and process the image
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents)).convert('L').resize((28, 28))
-        img_array = np.array(image).reshape(1, -1) / 255.0
-
-        # Make prediction
-        prediction = int(model.predict(img_array)[0])
-        confidence = float(np.max(model.predict_proba(img_array)))
-
-        return {
-            "success": True,
-            "prediction": prediction,
-            "confidence": confidence
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/")
-async def health_check():
-    return {"status": "OK", "message": "Digit Classifier API is running"}
+    
